@@ -2,6 +2,7 @@
 *.o
 *.a
 *.so
+bin/
 
 # Folders
 _obj
@@ -20,3 +21,6 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+
+# gihub and go gets
+github.com/
