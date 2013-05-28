@@ -1,8 +1,7 @@
 package gitsync
 
 import (
-	"fmt"
-	"os"
+	"log"
 	"time"
 )
 
@@ -10,37 +9,52 @@ import (
  * It will look for changes to branches and tags including creation and
  * deletion.
  */
-func PollDirectory(repo Repo, changes chan GitChange, period time.Duration) {
-	fmt.Printf("Watching %s\n", repo)
-	defer func() { fmt.Printf("Stopped watching %s\n", repo) }()
+func PollDirectory(name string, repo Repo, changes chan GitChange, period time.Duration) {
+	log.Printf("Watching %s\n", repo)
+	defer log.Printf("Stopped watching %s\n", repo)
 
 	prev := make(map[string]*GitChange) // last seen ref status
 
+	// Every poll period, get the list of branches.
+	// For those seen before, fill in previous and currect SHA in change. Remove
+	// from prev set.
+	// For those that are new, fill in data.
+	// For remaining entries in prev set, these are deleted. Send them with
+	// current as empty.
 	for {
-		next := make(map[string]*GitChange) // currently seen refs
-
-		branches, err := repo.Branches()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Cannot get branch list for %s: %s\n", repo, err)
+		var (
+			next     = make(map[string]*GitChange) // currently seen refs, becomes prev set
+			branches []*GitChange                  // working set of branches
+			err      error
+		)
+		if branches, err = repo.Branches(); err != nil {
+			log.Fatalf("Cannot get branch list for %s: %s", repo, err)
 		}
 
 		for _, branch := range branches {
-			old, present := prev[branch.RefName]
-
+			var (
+				old, seenBefore  = prev[branch.RefName]
+				existsAndChanged = seenBefore && (old.Current != branch.Current || old.CheckedOut != branch.CheckedOut)
+			)
+			branch.Name = name // always assign a name
 			next[branch.RefName] = branch
-
-			if present {
-				branch.Current = old.Current
-				delete(prev, branch.RefName)
+			if existsAndChanged {
+				branch.Prev = old.Current
 			}
 
-			switch {
-			case !present, old.Current != branch.Current, old.CheckedOut != branch.CheckedOut:
+			// share changes and new branches
+			if !seenBefore || existsAndChanged {
 				changes <- *branch
+			}
+
+			// Cleanup any branch we have seen before, and handled above
+			if seenBefore {
+				delete(prev, branch.RefName)
 			}
 		}
 
 		// report remaining branches in prev as deleted
+		// Note: Use the prev set object since we have no current one to play with
 		for _, old := range prev {
 			old.Prev = old.Current
 			old.Current = ""
