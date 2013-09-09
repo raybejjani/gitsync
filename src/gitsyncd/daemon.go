@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"gitsync"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"os/user"
@@ -68,9 +71,19 @@ func main() {
 
 	// Start changes handler
 	var (
-		dirName = os.Args[1] // directory to watch
-		netName string       // name to report to network
+		username  = flag.String("user", "", "Username to report when sending changes to the network")
+		groupIP   = flag.String("ip", gitsync.IP4MulticastAddr.IP.String(), "Multicast IP to connect to")
+		groupPort = flag.Int("port", gitsync.IP4MulticastAddr.Port, "Port to use for network IO")
+	)
+	flag.Parse()
 
+	var (
+		err       error
+		dirName   = flag.Args()[0] // directories to watch
+		netName   string           // name to report to network
+		groupAddr *net.UDPAddr     // network address to connect to
+
+		// channels to move change messages around
 		localChanges    = make(chan gitsync.GitChange, 128)
 		localChangesDup = make(chan gitsync.GitChange, 128)
 		remoteChanges   = make(chan gitsync.GitChange, 128)
@@ -78,10 +91,17 @@ func main() {
 	)
 
 	// get the user's name
-	if user, err := user.Current(); err != nil {
-		log.Fatalf("Cannot get username: %v", err)
-	} else {
+	if *username != "" {
+		netName = *username
+	} else if user, err := user.Current(); err == nil {
 		netName = user.Username
+	} else {
+		log.Fatalf("Cannot get username: %v", err)
+	}
+
+	if groupAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", *groupIP, *groupPort)); err != nil {
+		log.Fatalf("Cannot resolve address %s: %v", err)
+		os.Exit(1)
 	}
 
 	// start directory poller
@@ -94,7 +114,7 @@ func main() {
 
 	// start network listener
 	FanOut(localChanges, localChangesDup, toRemoteChanges)
-	go gitsync.NetIO(netName, remoteChanges, toRemoteChanges)
+	go gitsync.NetIO(netName, groupAddr, remoteChanges, toRemoteChanges)
 
 	changes := FanIn(localChangesDup, remoteChanges)
 	go RecieveChanges(changes)

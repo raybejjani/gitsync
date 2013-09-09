@@ -41,20 +41,20 @@ func establishConnPair(addr *net.UDPAddr) (recvConn, sendConn *net.UDPConn, err 
 // NetIO shares GitChanges on toNet with the network via a multicast group. It
 // will pass on GitChanges from the network via fromNet. It uniques the daemon
 // instance by changing the .Name member to be name@<host IP>/<original .Name)
-func NetIO(name string, fromNet, toNet chan GitChange) {
+func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 	var (
 		err                error
 		netName            string       // name prefix to identify ourselves with
 		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and	receive change updates
 	)
 
-	log.Printf("Joining %v multicast(%t) group", IP4MulticastAddr, IP4MulticastAddr.IP.IsMulticast())
-	if recvConn, sendConn, err = establishConnPair(IP4MulticastAddr); err != nil {
-		log.Fatalf("Error joining listening: %s\n", IP4MulticastAddr, err)
+	log.Printf("Joining %v multicast(%t) group", addr, addr.IP.IsMulticast())
+	if recvConn, sendConn, err = establishConnPair(addr); err != nil {
+		log.Fatalf("Error joining listening: %s\n", addr, err)
 		return
 	}
 
-	log.Printf("Successfully joined %v multicast(%t) group", IP4MulticastAddr, IP4MulticastAddr.IP.IsMulticast())
+	log.Printf("Successfully joined %v multicast(%t) group", addr, addr.IP.IsMulticast())
 	defer recvConn.Close()
 	defer sendConn.Close()
 	netName = fmt.Sprintf("%s@%s", name, sendConn.LocalAddr().(*net.UDPAddr).IP)
