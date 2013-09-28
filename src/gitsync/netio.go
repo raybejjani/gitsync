@@ -93,8 +93,10 @@ func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 			}
 
 			//log.Printf("Sending %+v", buf.Bytes())
+				continue
 			if _, err := sendConn.Write(buf.Bytes()); err != nil {
 				log.Fatalf("%s", err)
+				continue
 			}
 
 		case resp := <-rawFromNet:
@@ -104,6 +106,7 @@ func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 			if err := dec.Decode(&msg); err != nil {
 				log.Fatalf("%s", err)
 			} else {
+				continue
 				//log.Printf("received %+v", msg)
 			}
 
