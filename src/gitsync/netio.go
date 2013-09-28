@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"log"
+	log "github.com/ngmoco/timber"
 	"net"
 	"strings"
 )
@@ -41,20 +41,20 @@ func establishConnPair(addr *net.UDPAddr) (recvConn, sendConn *net.UDPConn, err 
 // NetIO shares GitChanges on toNet with the network via a multicast group. It
 // will pass on GitChanges from the network via fromNet. It uniques the daemon
 // instance by changing the .Name member to be name@<host IP>/<original .Name)
-func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
+func NetIO(l log.Logger, name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 	var (
 		err                error
 		netName            string       // name prefix to identify ourselves with
 		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and	receive change updates
 	)
 
-	log.Printf("Joining %v multicast(%t) group", addr, addr.IP.IsMulticast())
+	l.Info("Joining %v multicast(%t) group", addr, addr.IP.IsMulticast())
 	if recvConn, sendConn, err = establishConnPair(addr); err != nil {
-		log.Fatalf("Error joining listening: %s\n", addr, err)
+		l.Critical("Error joining listening: %s\n", addr, err)
 		return
 	}
 
-	log.Printf("Successfully joined %v multicast(%t) group", addr, addr.IP.IsMulticast())
+	l.Info("Successfully joined %v multicast(%t) group", addr, addr.IP.IsMulticast())
 	defer recvConn.Close()
 	defer sendConn.Close()
 	netName = fmt.Sprintf("%s@%s", name, sendConn.LocalAddr().(*net.UDPAddr).IP)
@@ -67,7 +67,7 @@ func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 			b := make([]byte, 1024)
 
 			if n, err := recvConn.Read(b); err != nil {
-				log.Fatalf("Cannot read socket: %s", err)
+				l.Critical("Cannot read socket: %s", err)
 				continue
 			} else {
 				rawFromNet <- b[:n]
@@ -84,18 +84,18 @@ func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 
 			req.Name = fmt.Sprintf("%s:%s", netName, req.Name)
 
-			//log.Printf("Sending %+v", req)
+			l.Fine("Sending %+v", req)
 			buf := &bytes.Buffer{}
 			enc := gob.NewEncoder(buf)
 
 			if err := enc.Encode(req); err != nil {
-				log.Fatalf("%s", err)
+				l.Critical("%s", err)
+				continue
 			}
 
-			//log.Printf("Sending %+v", buf.Bytes())
-				continue
+			l.Fine("Sending %+v", buf.Bytes())
 			if _, err := sendConn.Write(buf.Bytes()); err != nil {
-				log.Fatalf("%s", err)
+				l.Critical("%s", err)
 				continue
 			}
 
@@ -104,10 +104,10 @@ func NetIO(name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 			dec := gob.NewDecoder(bytes.NewReader(resp))
 
 			if err := dec.Decode(&msg); err != nil {
-				log.Fatalf("%s", err)
-			} else {
+				l.Critical("%s", err)
 				continue
-				//log.Printf("received %+v", msg)
+			} else {
+				l.Debug("received %+v", msg)
 			}
 
 			if !strings.HasPrefix(msg.Name, netName) {
