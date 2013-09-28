@@ -1,7 +1,7 @@
 package gitsync
 
 import (
-	"log"
+	log "github.com/ngmoco/timber"
 	"time"
 )
 
@@ -9,9 +9,9 @@ import (
  * It will look for changes to branches and tags including creation and
  * deletion.
  */
-func PollDirectory(name string, repo Repo, changes chan GitChange, period time.Duration) {
-	log.Printf("Watching %s\n", repo)
-	defer log.Printf("Stopped watching %s\n", repo)
+func PollDirectory(l log.Logger, name string, repo Repo, changes chan GitChange, period time.Duration) {
+	l.Info("Watching %s as %s\n", repo, name)
+	defer l.Info("Stopped watching %s as %s\n", repo, name)
 
 	prev := make(map[string]*GitChange) // last seen ref status
 
@@ -26,7 +26,6 @@ func PollDirectory(name string, repo Repo, changes chan GitChange, period time.D
 			next     = make(map[string]*GitChange) // currently seen refs, becomes prev set
 			branches []*GitChange                  // working set of branches
 			err      error
-			log.Fatalf("Cannot get branch list for %s: %s", repo, err)
 		)
 
 		// run cmd every period, except on the first try
@@ -35,6 +34,7 @@ func PollDirectory(name string, repo Repo, changes chan GitChange, period time.D
 		}
 
 		if branches, err = repo.Branches(); err != nil {
+			l.Critical("Cannot get branch list for %s: %s", repo, err)
 			continue
 		}
 		for _, branch := range branches {
