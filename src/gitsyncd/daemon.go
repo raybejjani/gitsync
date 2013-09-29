@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	log "github.com/ngmoco/timber"
 	"gitsync"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -57,17 +57,17 @@ func RecieveChanges(changes chan gitsync.GitChange) {
 		select {
 		case change, ok := <-changes:
 			if !ok {
-				log.Printf("Exiting Loop")
+				log.Debug("Exiting Loop")
 				break
 			}
 
-			log.Printf("saw %+v", change)
+			log.Info("saw %+v", change)
 		}
 	}
 }
 
 func main() {
-	log.Printf("Starting")
+	log.Debug("Starting up")
 
 	// Start changes handler
 	var (
@@ -76,6 +76,13 @@ func main() {
 		groupPort = flag.Int("port", gitsync.IP4MulticastAddr.Port, "Port to use for network IO")
 	)
 	flag.Parse()
+
+	// add console output for logs
+	log.AddLogger(log.ConfigLogger{
+		LogWriter: new(log.ConsoleWriter),
+		Level:     log.DEBUG,
+		Formatter: log.NewPatFormatter("[%D %T] [%L] %S %M"),
+	})
 
 	var (
 		err       error
@@ -96,25 +103,26 @@ func main() {
 	} else if user, err := user.Current(); err == nil {
 		netName = user.Username
 	} else {
-		log.Fatalf("Cannot get username: %v", err)
+		log.Critical("Cannot get username: %v", err)
+		os.Exit(1)
 	}
 
 	if groupAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", *groupIP, *groupPort)); err != nil {
-		log.Fatalf("Cannot resolve address %s: %v", err)
+		log.Critical("Cannot resolve address %v:%v: %v", *groupIP, *groupPort, err)
 		os.Exit(1)
 	}
 
 	// start directory poller
 	repo, err := gitsync.NewCliRepo(dirName)
 	if err != nil {
-		log.Fatalf("Cannot open repo: %s", err)
+		log.Critical("Cannot open repo: %s", err)
 		os.Exit(1)
 	}
-	go gitsync.PollDirectory(dirName, repo, localChanges, 1*time.Second)
+	go gitsync.PollDirectory(log.Global, dirName, repo, localChanges, 1*time.Second)
 
 	// start network listener
 	FanOut(localChanges, localChangesDup, toRemoteChanges)
-	go gitsync.NetIO(netName, groupAddr, remoteChanges, toRemoteChanges)
+	go gitsync.NetIO(log.Global, netName, groupAddr, remoteChanges, toRemoteChanges)
 
 	changes := FanIn(localChangesDup, remoteChanges)
 	go RecieveChanges(changes)
@@ -123,5 +131,5 @@ func main() {
 	signal.Notify(s, os.Kill)
 	<-s
 
-	log.Printf("Exiting")
+	log.Debug("Exiting")
 }
