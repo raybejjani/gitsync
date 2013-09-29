@@ -21,16 +21,22 @@ func PollDirectory(name string, repo Repo, changes chan GitChange, period time.D
 	// For those that are new, fill in data.
 	// For remaining entries in prev set, these are deleted. Send them with
 	// current as empty.
-	for {
+	for firstAttempt := true; ; firstAttempt = false {
 		var (
 			next     = make(map[string]*GitChange) // currently seen refs, becomes prev set
 			branches []*GitChange                  // working set of branches
 			err      error
-		)
-		if branches, err = repo.Branches(); err != nil {
 			log.Fatalf("Cannot get branch list for %s: %s", repo, err)
+		)
+
+		// run cmd every period, except on the first try
+		if !firstAttempt {
+			time.Sleep(period)
 		}
 
+		if branches, err = repo.Branches(); err != nil {
+			continue
+		}
 		for _, branch := range branches {
 			var (
 				old, seenBefore  = prev[branch.RefName]
@@ -64,8 +70,5 @@ func PollDirectory(name string, repo Repo, changes chan GitChange, period time.D
 		}
 
 		prev = next
-
-		// run cmd every period
-		time.Sleep(period)
 	}
 }
