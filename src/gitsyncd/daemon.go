@@ -66,11 +66,16 @@ func ReceiveChanges(changes chan gitsync.GitChange) {
 	}
 }
 
-func main() {
-	if len(flag.Args()) == 0 {
-		log.Fatalf("No Git directory supplied")
-	}
+func init() {
+	// add console output for logs
+	log.AddLogger(log.ConfigLogger{
+		LogWriter: new(log.ConsoleWriter),
+		Level:     log.DEBUG,
+		Formatter: log.NewPatFormatter("[%D %T] [%L] %S %M"),
+	})
+}
 
+func main() {
 	log.Debug("Starting up")
 
 	// Start changes handler
@@ -81,12 +86,9 @@ func main() {
 	)
 	flag.Parse()
 
-	// add console output for logs
-	log.AddLogger(log.ConfigLogger{
-		LogWriter: new(log.ConsoleWriter),
-		Level:     log.DEBUG,
-		Formatter: log.NewPatFormatter("[%D %T] [%L] %S %M"),
-	})
+	if len(flag.Args()) == 0 {
+		log.Fatalf("No Git directory supplied")
+	}
 
 	var (
 		err       error
