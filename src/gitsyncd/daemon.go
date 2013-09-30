@@ -52,7 +52,7 @@ func Clone(source chan gitsync.GitChange) (duplicate chan gitsync.GitChange) {
 	return
 }
 
-func RecieveChanges(changes chan gitsync.GitChange) {
+func ReceiveChanges(changes chan gitsync.GitChange) {
 	for {
 		select {
 		case change, ok := <-changes:
