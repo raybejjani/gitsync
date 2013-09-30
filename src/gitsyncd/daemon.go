@@ -67,6 +67,10 @@ func RecieveChanges(changes chan gitsync.GitChange) {
 }
 
 func main() {
+	if len(flag.Args()) == 0 {
+		log.Fatalf("No Git directory supplied")
+	}
+
 	log.Printf("Starting")
 
 	// Start changes handler
