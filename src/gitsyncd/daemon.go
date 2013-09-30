@@ -67,6 +67,10 @@ func RecieveChanges(changes chan gitsync.GitChange) {
 }
 
 func main() {
+	if len(flag.Args()) == 0 {
+		log.Fatalf("No Git directory supplied")
+	}
+
 	log.Printf("Starting")
 
 	// Start changes handler
@@ -76,9 +80,6 @@ func main() {
 		groupPort = flag.Int("port", gitsync.IP4MulticastAddr.Port, "Port to use for network IO")
 	)
 	flag.Parse()
-	if len(flag.Args()) == 0 {
-		log.Fatalf("No Git directory supplied")
-	}
 
 	var (
 		err       error
