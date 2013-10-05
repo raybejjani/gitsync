@@ -7,7 +7,7 @@ import (
 )
 
 // match: '* master 98ce09c goo'
-var branchLineRE = regexp.MustCompile("([* ]) ((?:[a-zA-Z0-9/-_]+)|(?:[(]no branch[)]))[ ]+([0-9a-f]{40}) .*")
+var branchLineRE = regexp.MustCompile(`([* ]) ((?:[a-zA-Z0-9/\-_]+)|(?:[(]no branch[)]))[ ]+([0-9a-f]{40}) .*`)
 
 // Repo represents a git repository. It provides the basic interrogation
 // abilities.
