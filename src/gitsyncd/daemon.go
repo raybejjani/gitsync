@@ -14,46 +14,6 @@ import (
 	"time"
 )
 
-func FanIn(inChannels ...chan gitsync.GitChange) (target chan gitsync.GitChange) {
-	target = make(chan gitsync.GitChange)
-
-	for _, c := range inChannels {
-		go func(in chan gitsync.GitChange) {
-			for {
-				newVal, stillOpen := <-in
-				if !stillOpen {
-					return
-				}
-
-				target <- newVal
-			}
-		}(c)
-	}
-
-	return
-}
-
-func FanOut(source chan gitsync.GitChange, outChannels ...chan gitsync.GitChange) {
-	go func() {
-		for {
-			newVal, stillOpen := <-source
-			if !stillOpen {
-				return
-			}
-
-			for _, out := range outChannels {
-				out <- newVal
-			}
-		}
-	}()
-}
-
-func Clone(source chan gitsync.GitChange) (duplicate chan gitsync.GitChange) {
-	duplicate = make(chan gitsync.GitChange)
-	FanOut(source, duplicate)
-	return
-}
-
 // unixSyslog discovers where the syslog daemon is running on the local machine
 // using a Unix domain socket.
 // NOTE: Stolen from golang log/syslog/syslog_unix.go
@@ -188,11 +148,10 @@ func main() {
 		groupAddr *net.UDPAddr     // network address to connect to
 
 		// channels to move change messages around
-		localChanges    = make(chan gitsync.GitChange, 128)
-		localChangesDup = make(chan gitsync.GitChange, 128)
 		remoteChanges   = make(chan gitsync.GitChange, 128)
 		toRemoteChanges = make(chan gitsync.GitChange, 128)
 	)
+	dirName = util.AbsPath(dirName)
 
 	// get the user's name
 	if *username != "" {
@@ -212,14 +171,14 @@ func main() {
 	if err != nil {
 		fatalf("Cannot open repo: %s", err)
 	}
-	go gitsync.PollDirectory(log.Global, dirName, repo, localChanges, 1*time.Second)
 
-	// start network listener
-	FanOut(localChanges, localChangesDup, toRemoteChanges)
+	if err = startGitDaemon(dirName); err != nil {
+		log.Fatalf("Unable to start git daemon")
+	}
+
+	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
 	go gitsync.NetIO(log.Global, netName, groupAddr, remoteChanges, toRemoteChanges)
-
-	changes := FanIn(localChangesDup, remoteChanges)
-	go ReceiveChanges(changes)
+	go ReceiveChanges(remoteChanges, repo)
 
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, os.Kill)
