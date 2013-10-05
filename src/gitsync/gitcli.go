@@ -33,8 +33,8 @@ func (repo *cliReader) String() string {
 
 // Branches reads all branches in a git repo
 func (repo *cliReader) Branches() (branches []*GitChange, err error) {
-	cmd := exec.Command("git", "branch", "-av", "--abbrev=40")
-	cmd.Dir = repo.path
+	cmd := exec.Command("git", "branch", "-v", "--abbrev=40")
+	cmd.Dir = repo.repoPath
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
