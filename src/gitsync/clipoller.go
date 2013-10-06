@@ -5,10 +5,9 @@ import (
 	"time"
 )
 
-/* PollDirectory will poll a git repo.
- * It will look for changes to branches and tags including creation and
- * deletion.
- */
+// PollDirectory will poll a git repo.
+// It will look for changes to branches and tags including creation and
+// deletion.
 func PollDirectory(l log.Logger, name string, repo Repo, changes chan GitChange, period time.Duration) {
 	l.Info("Watching %s as %s\n", repo, name)
 	defer l.Info("Stopped watching %s as %s\n", repo, name)

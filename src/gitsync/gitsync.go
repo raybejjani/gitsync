@@ -1,6 +1,5 @@
-/* Package gitsync provides the tools to syncronise git repositories between
- * peers.
- */
+// Package gitsync provides the tools to syncronise git repositories between
+// peers.
 package gitsync
 
 type GitChange struct {
