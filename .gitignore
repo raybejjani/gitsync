@@ -23,4 +23,5 @@ _testmain.go
 *.exe
 
 # gihub and go gets
-github.com/
+src/github.com/
+src/code.google.com/p/go.net/

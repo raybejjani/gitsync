@@ -120,7 +120,13 @@ func fetchChange(change gitsync.GitChange, dirName string) error {
 	return err
 }
 
-func ReceiveChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
+func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync.Repo) {
+	log.Info("webport %d", webPort)
+	var webEvents = make(chan *gitsync.GitChange, 128)
+	if webPort != 0 {
+		go serveWeb(webPort, webEvents)
+	}
+
 	for {
 		select {
 		case change, ok := <-changes:
@@ -136,6 +142,14 @@ func ReceiveChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
 					log.Info("Error fetching change")
 				} else {
 					log.Info("fetched change")
+				}
+			}
+
+			if webPort != 0 {
+				select {
+				case webEvents <- &change:
+				default:
+					log.Info("Dropped event %+v from websocket")
 				}
 			}
 		}
@@ -167,6 +181,7 @@ func main() {
 		logLevel  = flag.String("loglevel", "info", "Lowest log level to emit. Can be one of debug, info, warning, error.")
 		logSocket = flag.String("logsocket", "", "proto://address:port target to send logs to")
 		logFile   = flag.String("logfile", "", "path to file to log to")
+		webPort   = flag.Int("webport", 0, "Port for local webserver. Off by default")
 	)
 	flag.Parse()
 
@@ -218,7 +233,7 @@ func main() {
 
 	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
 	go gitsync.NetIO(log.Global, netName, groupAddr, remoteChanges, toRemoteChanges)
-	go ReceiveChanges(remoteChanges, repo)
+	go ReceiveChanges(remoteChanges, uint16(*webPort), repo)
 
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, os.Kill)
