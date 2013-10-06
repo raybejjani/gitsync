@@ -8,51 +8,14 @@ import (
 	"gitsync"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
+	"path"
 	"strings"
 	"time"
+	"util"
 )
-
-func FanIn(inChannels ...chan gitsync.GitChange) (target chan gitsync.GitChange) {
-	target = make(chan gitsync.GitChange)
-
-	for _, c := range inChannels {
-		go func(in chan gitsync.GitChange) {
-			for {
-				newVal, stillOpen := <-in
-				if !stillOpen {
-					return
-				}
-
-				target <- newVal
-			}
-		}(c)
-	}
-
-	return
-}
-
-func FanOut(source chan gitsync.GitChange, outChannels ...chan gitsync.GitChange) {
-	go func() {
-		for {
-			newVal, stillOpen := <-source
-			if !stillOpen {
-				return
-			}
-
-			for _, out := range outChannels {
-				out <- newVal
-			}
-		}
-	}()
-}
-
-func Clone(source chan gitsync.GitChange) (duplicate chan gitsync.GitChange) {
-	duplicate = make(chan gitsync.GitChange)
-	FanOut(source, duplicate)
-	return
-}
 
 // unixSyslog discovers where the syslog daemon is running on the local machine
 // using a Unix domain socket.
@@ -143,7 +106,21 @@ func fatalf(format string, args ...interface{}) {
 	log.Fatalf(format, args...)
 }
 
-func ReceiveChanges(changes chan gitsync.GitChange) {
+func fetchChange(change gitsync.GitChange, dirName string) error {
+	// We force a fetch from the change's source to a local branch
+	// named gitsync-<remote username>-<remote branch name>
+	localBranchName := fmt.Sprintf(
+		"gitsync-%s-%s", change.User, change.RefName)
+	fetchUrl := fmt.Sprintf(
+		"git://%s/%s", change.HostIp, change.RepoName)
+	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
+		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
+	cmd.Dir = dirName
+	err := cmd.Run()
+	return err
+}
+
+func ReceiveChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
 	for {
 		select {
 		case change, ok := <-changes:
@@ -152,10 +129,33 @@ func ReceiveChanges(changes chan gitsync.GitChange) {
 				break
 			}
 
-			log.Info("%+v", change)
-			fmt.Printf("%+v\n", change)
+			log.Info("saw %+v", change)
+			fmt.Printf("saw %+v\n", change)
+			if change.FromRepo(repo) {
+				if err := fetchChange(change, repo.Path()); err != nil {
+					log.Info("Error fetching change")
+				} else {
+					log.Info("fetched change")
+				}
+			}
 		}
 	}
+}
+
+func startGitDaemon(absolutePath string) error {
+	daemonSentinel := path.Join(absolutePath, ".git",
+		"git-daemon-export-ok")
+	if _, err := os.Stat(daemonSentinel); os.IsNotExist(err) {
+		_, err := os.Create(daemonSentinel)
+		if err != nil {
+			log.Fatalf("Unable to set up git daemon")
+		}
+	}
+	cmd := exec.Command("git", "daemon", "--reuseaddr",
+		fmt.Sprintf("--base-path=%s/..", absolutePath),
+		absolutePath)
+	err := cmd.Start()
+	return err
 }
 
 func main() {
@@ -188,11 +188,10 @@ func main() {
 		groupAddr *net.UDPAddr     // network address to connect to
 
 		// channels to move change messages around
-		localChanges    = make(chan gitsync.GitChange, 128)
-		localChangesDup = make(chan gitsync.GitChange, 128)
 		remoteChanges   = make(chan gitsync.GitChange, 128)
 		toRemoteChanges = make(chan gitsync.GitChange, 128)
 	)
+	dirName = util.AbsPath(dirName)
 
 	// get the user's name
 	if *username != "" {
@@ -212,14 +211,14 @@ func main() {
 	if err != nil {
 		fatalf("Cannot open repo: %s", err)
 	}
-	go gitsync.PollDirectory(log.Global, dirName, repo, localChanges, 1*time.Second)
 
-	// start network listener
-	FanOut(localChanges, localChangesDup, toRemoteChanges)
+	if err = startGitDaemon(dirName); err != nil {
+		log.Fatalf("Unable to start git daemon")
+	}
+
+	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
 	go gitsync.NetIO(log.Global, netName, groupAddr, remoteChanges, toRemoteChanges)
-
-	changes := FanIn(localChangesDup, remoteChanges)
-	go ReceiveChanges(changes)
+	go ReceiveChanges(remoteChanges, repo)
 
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, os.Kill)

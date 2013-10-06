@@ -3,10 +3,8 @@ package gitsync
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	log "github.com/ngmoco/timber"
 	"net"
-	"strings"
 )
 
 var (
@@ -41,10 +39,9 @@ func establishConnPair(addr *net.UDPAddr) (recvConn, sendConn *net.UDPConn, err 
 // NetIO shares GitChanges on toNet with the network via a multicast group. It
 // will pass on GitChanges from the network via fromNet. It uniques the daemon
 // instance by changing the .Name member to be name@<host IP>/<original .Name)
-func NetIO(l log.Logger, name string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
+func NetIO(l log.Logger, username string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 	var (
 		err                error
-		netName            string       // name prefix to identify ourselves with
 		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and	receive change updates
 	)
 
@@ -57,7 +54,7 @@ func NetIO(l log.Logger, name string, addr *net.UDPAddr, fromNet, toNet chan Git
 	l.Info("Successfully joined %v multicast(%t) group", addr, addr.IP.IsMulticast())
 	defer recvConn.Close()
 	defer sendConn.Close()
-	netName = fmt.Sprintf("%s@%s", name, sendConn.LocalAddr().(*net.UDPAddr).IP)
+	hostIp := sendConn.LocalAddr().(*net.UDPAddr).IP.String()
 
 	term := false
 	defer func() { term = true }()
@@ -82,9 +79,10 @@ func NetIO(l log.Logger, name string, addr *net.UDPAddr, fromNet, toNet chan Git
 				return
 			}
 
-			req.Name = fmt.Sprintf("%s:%s", netName, req.Name)
+			req.User = username
+			req.HostIp = hostIp
 
-			l.Fine("Sending %+v", req)
+			l.Info("Sending %+v", req)
 			buf := &bytes.Buffer{}
 			enc := gob.NewEncoder(buf)
 
@@ -110,7 +108,9 @@ func NetIO(l log.Logger, name string, addr *net.UDPAddr, fromNet, toNet chan Git
 				l.Debug("received %+v", msg)
 			}
 
-			if !strings.HasPrefix(msg.Name, netName) {
+			// a host should ignore changes made by its
+			// own user
+			if msg.User != username {
 				fromNet <- msg
 			}
 		}
