@@ -55,7 +55,7 @@ func (repo *cliReader) RootCommit() (rootCommit string, err error) {
 	if bytes.Count(output, []byte{'\n'}) > 1 {
 		log.Critical("More than one root commit present")
 	}
-	rootCommit = string(output)
+	rootCommit = string(bytes.TrimSpace(output))
 	return
 }
 
