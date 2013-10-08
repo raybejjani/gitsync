@@ -6,7 +6,7 @@ import (
 	"fmt"
 	log "github.com/ngmoco/timber"
 	"gitsync"
-	"html"
+	"html/template"
 	"net/http"
 	"sync"
 )
@@ -81,6 +81,13 @@ func handleGitChangeWebClient(cs *clientSet, ws *websocket.Conn) {
 	}
 }
 
+func renderTemplate(w http.ResponseWriter, tmplPath string) {
+	t := template.Must(template.ParseFiles(tmplPath))
+	if err := t.Execute(w, nil); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // serveWeb starts a webserver that can serve a page and websocket events as
 // they are seen.
 // It is expected to be run only once and uses the http package global request
@@ -90,10 +97,10 @@ func serveWeb(port uint16, events chan *gitsync.GitChange) {
 	// below
 	var cs = clientSet{
 		clients: make(map[*websocket.Conn]chan gitsync.GitChange)}
-
-	// Static page handler
+	// Handle any static files (JS/CSS files)
+	http.Handle("/web/static/", http.FileServer(http.Dir(".")))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
+		renderTemplate(w, "web/templates/index.html")
 	})
 
 	// Events endpoint
