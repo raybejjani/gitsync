@@ -108,11 +108,7 @@ func NetIO(l log.Logger, username string, addr *net.UDPAddr, fromNet, toNet chan
 				l.Debug("received %+v", msg)
 			}
 
-			// a host should ignore changes made by its
-			// own user
-			if msg.User != username {
-				fromNet <- msg
-			}
+			fromNet <- msg
 		}
 	}
 }
