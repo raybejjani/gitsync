@@ -25,3 +25,6 @@ _testmain.go
 # gihub and go gets
 src/github.com/
 src/code.google.com/p/go.net/
+
+# files created by build
+src/gitsyncd/webcontent/content.go

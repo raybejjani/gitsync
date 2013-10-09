@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "github.com/ngmoco/timber"
 	"gitsync"
+	"gitsyncd/webcontent"
 	"html/template"
 	"net/http"
 	"sync"
@@ -97,11 +98,14 @@ func serveWeb(port uint16, events chan *gitsync.GitChange) {
 	// below
 	var cs = clientSet{
 		clients: make(map[*websocket.Conn]chan gitsync.GitChange)}
+
 	// Handle any static files (JS/CSS files)
-	http.Handle("/web/static/", http.FileServer(http.Dir(".")))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		renderTemplate(w, "web/templates/index.html")
-	})
+	if handler, err := webcontent.NewMapHandler(webcontent.Paths); err != nil {
+		log.Error("Error building templates for web content: %s", err)
+	} else {
+		log.Debug("Registering / handler")
+		http.Handle("/", handler)
+	}
 
 	// Events endpoint
 	// Note: we wrap the handler in a closure to pass in the clientSet
