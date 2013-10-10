@@ -39,7 +39,7 @@ func establishConnPair(addr *net.UDPAddr) (recvConn, sendConn *net.UDPConn, err 
 // NetIO shares GitChanges on toNet with the network via a multicast group. It
 // will pass on GitChanges from the network via fromNet. It uniques the daemon
 // instance by changing the .Name member to be name@<host IP>/<original .Name)
-func NetIO(l log.Logger, username string, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
+func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 	var (
 		err                error
 		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and	receive change updates
@@ -79,7 +79,7 @@ func NetIO(l log.Logger, username string, addr *net.UDPAddr, fromNet, toNet chan
 				return
 			}
 
-			req.User = username
+			req.User = repo.User()
 			req.HostIp = hostIp
 
 			l.Info("Sending %+v", req)
@@ -98,17 +98,23 @@ func NetIO(l log.Logger, username string, addr *net.UDPAddr, fromNet, toNet chan
 			}
 
 		case resp := <-rawFromNet:
-			var msg GitChange
+			var change GitChange
 			dec := gob.NewDecoder(bytes.NewReader(resp))
 
-			if err := dec.Decode(&msg); err != nil {
+			if err := dec.Decode(&change); err != nil {
 				l.Critical("%s", err)
 				continue
 			} else {
-				l.Debug("received %+v", msg)
+				l.Debug("received %+v", change)
 			}
 
-			fromNet <- msg
+			if rootCommit, err := repo.RootCommit(); err != nil {
+				log.Critical("Error getting root commit")
+			} else {
+				if (repo.User() != change.User) && (rootCommit == change.RootCommit) {
+					fromNet <- change
+				}
+			}
 		}
 	}
 }

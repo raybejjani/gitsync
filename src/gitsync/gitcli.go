@@ -19,6 +19,7 @@ type Repo interface {
 
 	Name() string
 	Path() string
+	User() string
 	Branches() (branches []*GitChange, err error)
 	RootCommit() (rootCommit string, err error)
 }
@@ -28,12 +29,14 @@ type Repo interface {
 type cliReader struct {
 	repoPath string // path containing repo, e.g. /foo/bar/moo
 	repoName string // directory of repo, e.g. moo
+	userName string
 }
 
-func NewCliRepo(repoAbsPath string) (repo *cliReader, err error) {
+func NewCliRepo(userName string, repoAbsPath string) (repo *cliReader, err error) {
 	return &cliReader{
 		repoPath: repoAbsPath,
-		repoName: path.Base(repoAbsPath)}, nil
+		repoName: path.Base(repoAbsPath),
+		userName: userName}, nil
 }
 
 func (repo *cliReader) String() string {
@@ -42,6 +45,10 @@ func (repo *cliReader) String() string {
 
 func (repo *cliReader) Path() string {
 	return repo.repoPath
+}
+
+func (repo *cliReader) User() string {
+	return repo.userName
 }
 
 func (repo *cliReader) Name() string {

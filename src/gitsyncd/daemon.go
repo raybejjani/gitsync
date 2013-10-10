@@ -137,7 +137,6 @@ func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync
 			}
 
 			log.Info("saw %+v", change)
-			fmt.Printf("saw %+v\n", change)
 			if change.FromRepo(repo) {
 				if err := fetchChange(change, repo.Path()); err != nil {
 					log.Info("Error fetching change")
@@ -221,7 +220,7 @@ func main() {
 	var (
 		err       error
 		dirName   = flag.Args()[0] // directories to watch
-		netName   string           // name to report to network
+		userId    string           // username
 		groupAddr *net.UDPAddr     // network address to connect to
 
 		// channels to move change messages around
@@ -232,9 +231,9 @@ func main() {
 
 	// get the user's name
 	if *username != "" {
-		netName = *username
+		userId = *username
 	} else if user, err := user.Current(); err == nil {
-		netName = user.Username
+		userId = user.Username
 	} else {
 		fatalf("Cannot get username: %v", err)
 	}
@@ -244,7 +243,7 @@ func main() {
 	}
 
 	// start directory poller
-	repo, err := gitsync.NewCliRepo(dirName)
+	repo, err := gitsync.NewCliRepo(userId, dirName)
 	if err != nil {
 		fatalf("Cannot open repo: %s", err)
 	}
@@ -254,7 +253,7 @@ func main() {
 	}
 
 	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
-	go gitsync.NetIO(log.Global, netName, groupAddr, remoteChanges, toRemoteChanges)
+	go gitsync.NetIO(log.Global, repo, groupAddr, remoteChanges, toRemoteChanges)
 	go ReceiveChanges(remoteChanges, uint16(*webPort), repo)
 
 	s := make(chan os.Signal, 1)
