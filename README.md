@@ -23,9 +23,9 @@ Running
 Run with `gitsyncd /path/to/repo`.
 
 You can open up a local webserver to see a live-updating page of your
-coworkers' changes by supplying a port number: `gitsyncd /path/to/repo
-<port>`. Then go to `http://localhost:<port>` (it's very rudimentary
-for now).
+coworkers' changes by supplying a port number: 
+`gitsyncd -webport=<port> /path/to/repo `.  Then go to
+`http://localhost:<port>` (it's very rudimentary for now).
 
 See extended options by running `gitsyncd -h`.
 
