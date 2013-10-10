@@ -9,7 +9,7 @@ the other peers.
 For example, say Alice and Bob are working on repo 'foo' on their
 separate machines. With gitsyncd running on both machines, everytime
 Alice makes a local commit, Bob's machine will auto-fetch Alice's
-modified branch into a local one named `gitsync-Alice-branch`.
+modified branch into a local one named `gitsync-Alice-<branch>`.
 
 Installing
 ----------
