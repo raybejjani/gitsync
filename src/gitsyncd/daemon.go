@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path"
 	"strings"
+	"syscall"
 	"time"
 	"util"
 )
@@ -172,6 +173,27 @@ func startGitDaemon(absolutePath string) error {
 	return err
 }
 
+func cleanup(dirName string) {
+	// Delete all branches that begin with 'gitsync-'
+	getBranches := exec.Command("git", "branch")
+	getGitsyncBranches := exec.Command("grep", "gitsync-")
+	deleteGitsyncBranches := exec.Command("xargs", "git", "branch", "-D")
+	getBranches.Dir = dirName
+	getGitsyncBranches.Dir = dirName
+	deleteGitsyncBranches.Dir = dirName
+	getGitsyncBranches.Stdin, _ = getBranches.StdoutPipe()
+	deleteGitsyncBranches.Stdin, _ = getGitsyncBranches.StdoutPipe()
+	err := deleteGitsyncBranches.Start()
+	err = getGitsyncBranches.Start()
+	err = getBranches.Run()
+	err = getGitsyncBranches.Wait()
+	err = deleteGitsyncBranches.Wait()
+
+	if err != nil {
+		log.Info("Could not delete gitsync branches ", err)
+	}
+}
+
 func main() {
 	// Start changes handler
 	var (
@@ -236,6 +258,13 @@ func main() {
 	go ReceiveChanges(remoteChanges, uint16(*webPort), repo)
 
 	s := make(chan os.Signal, 1)
-	signal.Notify(s, os.Kill)
-	<-s
+	signal.Notify(s, os.Kill, os.Interrupt, syscall.SIGUSR1)
+	for {
+		c := <-s
+		cleanup(dirName)
+		if (c == os.Kill) || (c == os.Interrupt) {
+			break
+		}
+
+	}
 }
