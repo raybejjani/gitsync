@@ -4,6 +4,7 @@ all: gitsyncd
 .PHONY: gityncd gitsyncd_noweb
 gitsyncd: prep_web_files gitsyncd_noweb 
 
+	@GOPATH=`pwd` go get -tags='makebuild' gitsyncd
 gitsyncd_noweb: version 
 	@GOPATH=`pwd` go install -tags='makebuild' gitsyncd
 
