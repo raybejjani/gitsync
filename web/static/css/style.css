@@ -10,3 +10,7 @@ h1 {
 .status {
     margin-bottom: 10px;
 }
+
+.timestamp {
+    color: #a6a6a6;
+}
