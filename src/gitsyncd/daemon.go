@@ -18,6 +18,62 @@ import (
 	"util"
 )
 
+// Configuration Variables
+var (
+	username  string // username used when sharing on network
+	groupIP   string // Mulitcast IP for peer discovery & sharing
+	groupPort int    // Mulitcast port for peer discovery & sharing
+	logLevel  string // log level to emit. One of debug, info, warning, error.
+	logSocket string // proto://address:port target to send logs to
+	logFile   string // path to file to log to
+	webPort   int    // Port for local webserver. Off(0) by default
+
+	dirName   string       // Directory to watch
+	groupAddr *net.UDPAddr // network address to connect to
+)
+
+// parseArgs handles CLI arguments and extracts their defaults. It sets the module
+// globals above.
+func parseArgs() (err error) {
+	// setup the parser
+	flag.StringVar(&username, "user", "", "Username to report when sending changes to the network")
+	flag.StringVar(&groupIP, "ip", gitsync.IP4MulticastAddr.IP.String(), "Multicast IP to connect to")
+	flag.IntVar(&groupPort, "port", gitsync.IP4MulticastAddr.Port, "Port to use for network IO")
+	flag.StringVar(&logLevel, "loglevel", "info", "Lowest log level to emit. Can be one of debug, info, warning, error.")
+	flag.StringVar(&logSocket, "logsocket", "", "proto://address:port target to send logs to")
+	flag.StringVar(&logFile, "logfile", "", "path to file to log to")
+	flag.IntVar(&webPort, "webport", 0, "Port for local webserver. Off by default")
+	flag.Parse()
+
+	// parse the directory to watch
+	if len(flag.Args()) == 0 {
+		return fmt.Errorf("No Git directory supplied")
+	} else {
+		dirName = util.AbsPath(flag.Args()[0])
+	}
+
+	// init logging
+	if err = setupLogging(logLevel, logSocket, logFile); err != nil {
+		return fmt.Errorf("Cannot setup logging: %s", err)
+	}
+
+	// get the user's name, default to the running user if not passed in
+	if username == "" {
+		if user, err := user.Current(); err == nil {
+			username = user.Username
+		} else {
+			return fmt.Errorf("Cannot get username: %v", err)
+		}
+	}
+
+	// parse p2p IP:port
+	if groupAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", groupIP, groupPort)); err != nil {
+		return fmt.Errorf("Cannot resolve address %v:%v: %v", groupIP, groupPort, err)
+	}
+
+	return nil
+}
+
 // unixSyslog discovers where the syslog daemon is running on the local machine
 // using a Unix domain socket.
 // NOTE: Stolen from golang log/syslog/syslog_unix.go
@@ -193,57 +249,31 @@ func cleanup(dirName string) {
 	}
 }
 
+// exitOnSignal waits and returns on any of the passed in signals
+func exitOnSignal(signals ...os.Signal) {
+	s := make(chan os.Signal, 1)
+	signal.Notify(s, signals...)
+	<-s
+}
+
 func main() {
-	// Start changes handler
-	var (
-		username  = flag.String("user", "", "Username to report when sending changes to the network")
-		groupIP   = flag.String("ip", gitsync.IP4MulticastAddr.IP.String(), "Multicast IP to connect to")
-		groupPort = flag.Int("port", gitsync.IP4MulticastAddr.Port, "Port to use for network IO")
-		logLevel  = flag.String("loglevel", "info", "Lowest log level to emit. Can be one of debug, info, warning, error.")
-		logSocket = flag.String("logsocket", "", "proto://address:port target to send logs to")
-		logFile   = flag.String("logfile", "", "path to file to log to")
-		webPort   = flag.Int("webport", 0, "Port for local webserver. Off by default")
-	)
-	flag.Parse()
-
-	if len(flag.Args()) == 0 {
-		fatalf("No Git directory supplied")
-	}
-
-	if err := setupLogging(*logLevel, *logSocket, *logFile); err != nil {
-		fatalf("Cannot setup logging: %s", err)
+	if err := parseArgs(); err != nil {
+		fatalf(err.Error())
 	}
 
 	log.Info("Starting up")
 	defer log.Info("Exiting")
 
 	var (
-		err       error
-		dirName   = flag.Args()[0] // directories to watch
-		userId    string           // username
-		groupAddr *net.UDPAddr     // network address to connect to
+		err error
 
 		// channels to move change messages around
 		remoteChanges   = make(chan gitsync.GitChange, 128)
 		toRemoteChanges = make(chan gitsync.GitChange, 128)
 	)
-	dirName = util.AbsPath(dirName)
-
-	// get the user's name
-	if *username != "" {
-		userId = *username
-	} else if user, err := user.Current(); err == nil {
-		userId = user.Username
-	} else {
-		fatalf("Cannot get username: %v", err)
-	}
-
-	if groupAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", *groupIP, *groupPort)); err != nil {
-		fatalf("Cannot resolve address %v:%v: %v", *groupIP, *groupPort, err)
-	}
 
 	// start directory poller
-	repo, err := gitsync.NewCliRepo(userId, dirName)
+	repo, err := gitsync.NewCliRepo(username, dirName)
 	if err != nil {
 		fatalf("Cannot open repo: %s", err)
 	}
@@ -254,16 +284,10 @@ func main() {
 
 	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
 	go gitsync.NetIO(log.Global, repo, groupAddr, remoteChanges, toRemoteChanges)
-	go ReceiveChanges(remoteChanges, uint16(*webPort), repo)
+	go ReceiveChanges(remoteChanges, uint16(webPort), repo)
 
-	s := make(chan os.Signal, 1)
-	signal.Notify(s, os.Kill, os.Interrupt, syscall.SIGUSR1)
-	for {
-		c := <-s
-		cleanup(dirName)
-		if (c == os.Kill) || (c == os.Interrupt) {
-			break
-		}
+	defer cleanup(dirName)
 
-	}
+	// wait until we are told to shut down
+	exitOnSignal(os.Kill, os.Interrupt, syscall.SIGUSR1)
 }
