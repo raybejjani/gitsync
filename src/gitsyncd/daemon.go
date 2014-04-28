@@ -163,20 +163,10 @@ func fatalf(format string, args ...interface{}) {
 	log.Fatalf(format, args...)
 }
 
-func fetchChange(change gitsync.GitChange, dirName string) error {
-	// We force a fetch from the change's source to a local branch
-	// named gitsync-<remote username>-<remote branch name>
-	localBranchName := fmt.Sprintf(
-		"gitsync-%s-%s", change.User, change.RefName)
-	fetchUrl := fmt.Sprintf(
-		"git://%s/%s", change.HostIp, change.RepoName)
-	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
-		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
-	cmd.Dir = dirName
-	err := cmd.Run()
-	return err
-}
-
+// RecieveChanges takes local and remote changes and:
+// 1- local changes: sends them on the websocket
+// 2- remote changes: fetches them if they are for a repo we are watching
+// It also starts the local webserver
 func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync.Repo) {
 	log.Info("webport %d", webPort)
 	var webEvents = make(chan *gitsync.GitChange, 128)
@@ -212,7 +202,9 @@ func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync
 	}
 }
 
-func startGitDaemon(absolutePath string) error {
+// shareGitRepo spawns a gitdaemon instance for this repository. This allows
+// remote clients to connect and get fetch data.
+func shareGitRepo(absolutePath string) error {
 	daemonSentinel := path.Join(absolutePath, ".git",
 		"git-daemon-export-ok")
 	if _, err := os.Stat(daemonSentinel); os.IsNotExist(err) {
@@ -228,8 +220,21 @@ func startGitDaemon(absolutePath string) error {
 	return err
 }
 
+// fetchChange runs git to retrieve commits from a remotely running gitdaemon.
+func fetchChange(change gitsync.GitChange, dirName string) error {
+	// We force a fetch from the change's source to a local branch
+	// named gitsync-<remote username>-<remote branch name>
+	localBranchName := fmt.Sprintf("gitsync-%s-%s", change.User, change.RefName)
+	fetchUrl := fmt.Sprintf("git://%s/%s", change.HostIp, change.RepoName)
+	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
+		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
+	cmd.Dir = dirName
+	err := cmd.Run()
+	return err
+}
+
+// cleanup deletes all local branches beginning with 'gitsync-'
 func cleanup(dirName string) {
-	// Delete all branches that begin with 'gitsync-'
 	getBranches := exec.Command("git", "branch")
 	getGitsyncBranches := exec.Command("grep", "gitsync-")
 	deleteGitsyncBranches := exec.Command("xargs", "git", "branch", "-D")
@@ -278,7 +283,7 @@ func main() {
 		fatalf("Cannot open repo: %s", err)
 	}
 
-	if err = startGitDaemon(dirName); err != nil {
+	if err = shareGitRepo(dirName); err != nil {
 		log.Fatalf("Unable to start git daemon")
 	}
 
