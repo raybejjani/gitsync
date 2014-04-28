@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 
@@ -10,8 +11,14 @@ import (
 )
 
 func main() {
-	origin := "http://localhost/"
-	url := "ws://localhost:12345/events"
+	var (
+		hostname = flag.String("host", "localhost", "Host to connect to")
+		port     = flag.Int("port", 12345, "Port to connect to")
+	)
+	flag.Parse()
+
+	origin := fmt.Sprintf("http://%s/", *hostname)
+	url := fmt.Sprintf("ws://%s:%d/events", *hostname, *port)
 	ws, err := websocket.Dial(url, "", origin)
 	if err != nil {
 		log.Fatal(err)
