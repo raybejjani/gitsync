@@ -202,10 +202,25 @@ func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync
 	}
 }
 
+// manageGitRepo polls a git repository for changes and propagates them on the
+// changes channel. It also spawns a gitdaemon to allow remote peers to fetch
+// local git data.
+// Note: It currently spawns a goroutine to do the polling.
+func manageLocalGitRepo(repo gitsync.Repo, pollPeriod time.Duration, changes chan gitsync.GitChange) (err error) {
+	// begin sharing the repo
+	if err = shareGitRepo(repo); err != nil {
+		return fmt.Errorf("Unable to start git daemon: %s", err.Error())
+	}
+
+	go gitsync.PollRepoForChanges(log.Global, repo, changes, pollPeriod)
+
+	return
+}
+
 // shareGitRepo spawns a gitdaemon instance for this repository. This allows
 // remote clients to connect and get fetch data.
-func shareGitRepo(absolutePath string) error {
-	daemonSentinel := path.Join(absolutePath, ".git",
+func shareGitRepo(repo gitsync.Repo) error {
+	daemonSentinel := path.Join(repo.Path(), ".git",
 		"git-daemon-export-ok")
 	if _, err := os.Stat(daemonSentinel); os.IsNotExist(err) {
 		_, err := os.Create(daemonSentinel)
@@ -214,8 +229,8 @@ func shareGitRepo(absolutePath string) error {
 		}
 	}
 	cmd := exec.Command("git", "daemon", "--reuseaddr",
-		fmt.Sprintf("--base-path=%s/..", absolutePath),
-		absolutePath)
+		fmt.Sprintf("--base-path=%s/..", repo.Path()),
+		repo.Path())
 	err := cmd.Start()
 	return err
 }
@@ -277,17 +292,16 @@ func main() {
 		toRemoteChanges = make(chan gitsync.GitChange, 128)
 	)
 
-	// start directory poller
+	// begin observing the repo
 	repo, err := gitsync.NewCliRepo(username, dirName)
 	if err != nil {
 		fatalf("Cannot open repo: %s", err)
 	}
 
-	if err = shareGitRepo(dirName); err != nil {
-		log.Fatalf("Unable to start git daemon")
+	if err = manageLocalGitRepo(repo, 1*time.Second, toRemoteChanges); err != nil {
+		fatalf("Cannot manage repo: %s", err)
 	}
 
-	go gitsync.PollDirectory(log.Global, dirName, repo, toRemoteChanges, 1*time.Second)
 	go gitsync.NetIO(log.Global, repo, groupAddr, remoteChanges, toRemoteChanges)
 	go ReceiveChanges(remoteChanges, uint16(webPort), repo)
 

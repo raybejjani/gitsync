@@ -2,17 +2,16 @@ package gitsync
 
 import (
 	log "github.com/ngmoco/timber"
-	"path"
 	"strings"
 	"time"
 )
 
-// PollDirectory will poll a git repo.
+// PollRepoForChanges will poll a git repo.
 // It will look for changes to branches and tags including creation and
 // deletion.
-func PollDirectory(l log.Logger, dirName string, repo Repo, changes chan GitChange, period time.Duration) {
-	l.Info("Watching %s as %s\n", repo, dirName)
-	defer l.Info("Stopped watching %s as %s\n", repo, dirName)
+func PollRepoForChanges(l log.Logger, repo Repo, changes chan GitChange, period time.Duration) {
+	l.Info("Watching %s as %s\n", repo, repo.Name())
+	defer l.Info("Stopped watching %s as %s\n", repo, repo.Name())
 
 	prev := make(map[string]*GitChange) // last seen ref status
 
@@ -47,7 +46,7 @@ func PollDirectory(l log.Logger, dirName string, repo Repo, changes chan GitChan
 				existsAndChanged = seenBefore && (old.Current != branch.Current || old.CheckedOut != branch.CheckedOut)
 			)
 
-			branch.RepoName = path.Base(dirName)
+			branch.RepoName = repo.Name()
 			next[branch.RefName] = branch
 			if existsAndChanged {
 				branch.Prev = old.Current

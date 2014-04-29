@@ -85,6 +85,7 @@ func (repo *cliReader) Branches() (branches []*GitChange, err error) {
 			CheckedOut: m[1] == "*",
 			RootCommit: rootCommit,
 			RepoName:   repo.Name(),
+			User:       repo.userName,
 		})
 	}
 

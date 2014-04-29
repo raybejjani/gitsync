@@ -79,7 +79,6 @@ func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitCh
 				return
 			}
 
-			req.User = repo.User()
 			req.HostIp = hostIp
 
 			l.Info("Sending %+v", req)
