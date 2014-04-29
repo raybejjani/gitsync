@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "github.com/ngmoco/timber"
 	"gitsync"
+	"gitsync/changebus"
 	"net"
 	"os"
 	"os/exec"
@@ -288,8 +289,7 @@ func main() {
 		err error
 
 		// channels to move change messages around
-		remoteChanges   = make(chan gitsync.GitChange, 128)
-		toRemoteChanges = make(chan gitsync.GitChange, 128)
+		bus = changebus.New(8, nil)
 	)
 
 	// begin observing the repo
@@ -298,12 +298,12 @@ func main() {
 		fatalf("Cannot open repo: %s", err)
 	}
 
-	if err = manageLocalGitRepo(repo, 1*time.Second, toRemoteChanges); err != nil {
+	if err = manageLocalGitRepo(repo, 1*time.Second, bus.GetPublishChannel()); err != nil {
 		fatalf("Cannot manage repo: %s", err)
 	}
 
-	go gitsync.NetIO(log.Global, repo, groupAddr, remoteChanges, toRemoteChanges)
-	go ReceiveChanges(remoteChanges, uint16(webPort), repo)
+	go gitsync.NetIO(log.Global, repo, groupAddr, bus.GetPublishChannel(), bus.GetNewListener())
+	go ReceiveChanges(bus.GetNewListener(), uint16(webPort), repo)
 
 	defer cleanup(dirName)
 
