@@ -43,6 +43,7 @@ func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitCh
 	var (
 		err                error
 		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and receive change updates
+		peerAddr           string       // the address we will put into network-bound changes
 	)
 
 	l.Info("Joining %v multicast(%t) group", addr, addr.IP.IsMulticast())
@@ -54,7 +55,7 @@ func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitCh
 	l.Info("Successfully joined %v multicast(%t) group", addr, addr.IP.IsMulticast())
 	defer recvConn.Close()
 	defer sendConn.Close()
-	hostIp := sendConn.LocalAddr().(*net.UDPAddr).IP.String()
+	peerAddr = sendConn.LocalAddr().(*net.UDPAddr).String()
 
 	term := false
 	defer func() { term = true }()
@@ -75,11 +76,12 @@ func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitCh
 	for {
 		select {
 		case req, ok := <-toNet:
+			// exit when this channel is closed
 			if !ok {
 				return
 			}
 
-			req.HostIp = hostIp
+			req.PeerAddr = peerAddr
 
 			l.Info("Sending %+v", req)
 			buf := &bytes.Buffer{}
@@ -110,7 +112,7 @@ func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitCh
 			if rootCommit, err := repo.RootCommit(); err != nil {
 				log.Critical("Error getting root commit")
 			} else {
-				if (repo.User() != change.User) && (rootCommit == change.RootCommit) {
+				if (peerAddr != change.PeerAddr) && (rootCommit == change.RootCommit) {
 					fromNet <- change
 				}
 			}

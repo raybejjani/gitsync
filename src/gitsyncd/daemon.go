@@ -240,7 +240,7 @@ func fetchChange(change gitsync.GitChange, dirName string) error {
 	// We force a fetch from the change's source to a local branch
 	// named gitsync-<remote username>-<remote branch name>
 	localBranchName := fmt.Sprintf("gitsync-%s-%s", change.User, change.RefName)
-	fetchUrl := fmt.Sprintf("git://%s/%s", change.HostIp, change.RepoName)
+	fetchUrl := fmt.Sprintf("git://%s/%s", change.GetPeerIP(), change.RepoName)
 	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
 		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
 	cmd.Dir = dirName
