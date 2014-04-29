@@ -49,9 +49,9 @@ func (cs *clientSet) distributeEvent(event gitsync.GitChange) {
 
 // distribute will loop on incoming events and send them to all listening
 // clients
-func (cs *clientSet) distribute(events chan *gitsync.GitChange) {
+func (cs *clientSet) distribute(events chan gitsync.GitChange) {
 	for event := range events {
-		cs.distributeEvent(*event)
+		cs.distributeEvent(event)
 	}
 }
 
@@ -89,11 +89,11 @@ func renderTemplate(w http.ResponseWriter, tmplPath string) {
 	}
 }
 
-// serveWeb starts a webserver that can serve a page and websocket events as
-// they are seen.
+// serveChangesWeb starts a webserver that can serve a page and websocket events
+// as they are seen.
 // It is expected to be run only once and uses the http package global request
 // router. It does NOT return.
-func serveWeb(port uint16, events chan *gitsync.GitChange) {
+func serveChangesWeb(port uint16, events chan gitsync.GitChange) {
 	// the container for websocket clients, passed into every websocket handler
 	// below
 	var cs = clientSet{

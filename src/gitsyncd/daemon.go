@@ -164,39 +164,26 @@ func fatalf(format string, args ...interface{}) {
 	log.Fatalf(format, args...)
 }
 
-// RecieveChanges takes local and remote changes and:
-// 1- local changes: sends them on the websocket
-// 2- remote changes: fetches them if they are for a repo we are watching
-// It also starts the local webserver
-func ReceiveChanges(changes chan gitsync.GitChange, webPort uint16, repo gitsync.Repo) {
-	log.Info("webport %d", webPort)
-	var webEvents = make(chan *gitsync.GitChange, 128)
-	if webPort != 0 {
-		go serveWeb(webPort, webEvents)
-	}
-
+// fetchRemoteChanges will run a git fetch on remotes that have changed in repo.
+// This happens in response to a GitChange seen on changes.
+func fetchRemoteChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
+	log.Debug("Starting fetchRemoteChanges on %s", repo.Name())
+	defer log.Debug("Stopping fetchRemoteChanges on %s", repo.Name())
 	for {
 		select {
 		case change, ok := <-changes:
 			if !ok {
 				log.Debug("Exiting Loop")
-				break
+				return
 			}
 
-			log.Info("saw %+v", change)
+			log.Debug("saw %+v", change)
 			if change.FromRepo(repo) {
+				log.Info("Fetching remote changes for %s", repo.Name())
 				if err := fetchChange(change, repo.Path()); err != nil {
-					log.Info("Error fetching change")
+					log.Warn("Error fetching change")
 				} else {
-					log.Info("fetched change")
-				}
-			}
-
-			if webPort != 0 {
-				select {
-				case webEvents <- &change:
-				default:
-					log.Info("Dropped event %+v from websocket")
+					log.Debug("fetched change")
 				}
 			}
 		}
@@ -301,9 +288,12 @@ func main() {
 	if err = manageLocalGitRepo(repo, 1*time.Second, bus.GetPublishChannel()); err != nil {
 		fatalf("Cannot manage repo: %s", err)
 	}
+	go fetchRemoteChanges(bus.GetNewListener(), repo)
 
 	go gitsync.NetIO(log.Global, repo, groupAddr, bus.GetPublishChannel(), bus.GetNewListener())
-	go ReceiveChanges(bus.GetNewListener(), uint16(webPort), repo)
+	if webPort != 0 {
+		go serveChangesWeb(uint16(webPort), bus.GetNewListener())
+	}
 
 	defer cleanup(dirName)
 
