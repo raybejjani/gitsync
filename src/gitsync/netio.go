@@ -42,7 +42,7 @@ func establishConnPair(addr *net.UDPAddr) (recvConn, sendConn *net.UDPConn, err 
 func NetIO(l log.Logger, repo Repo, addr *net.UDPAddr, fromNet, toNet chan GitChange) {
 	var (
 		err                error
-		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and	receive change updates
+		recvConn, sendConn *net.UDPConn // UDP connections to allow us to send and receive change updates
 	)
 
 	l.Info("Joining %v multicast(%t) group", addr, addr.IP.IsMulticast())
