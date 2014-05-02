@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"os/user"
-	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -164,11 +163,11 @@ func fatalf(format string, args ...interface{}) {
 	log.Fatalf(format, args...)
 }
 
-// fetchRemoteChanges will run a git fetch on remotes that have changed in repo.
+// fetchRemoteOnChange will run a git fetch on remotes that have changed in repo.
 // This happens in response to a GitChange seen on changes.
-func fetchRemoteChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
-	log.Debug("Starting fetchRemoteChanges on %s", repo.Name())
-	defer log.Debug("Stopping fetchRemoteChanges on %s", repo.Name())
+func fetchRemoteOnChange(changes chan gitsync.GitChange, repo gitsync.Repo) {
+	log.Debug("Starting fetchRemoteOnChange on %s", repo.Name())
+	defer log.Debug("Stopping fetchRemoteOnChange on %s", repo.Name())
 	for {
 		select {
 		case change, ok := <-changes:
@@ -180,7 +179,7 @@ func fetchRemoteChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
 			log.Debug("saw %+v", change)
 			if change.FromRepo(repo) {
 				log.Info("Fetching remote changes for %s", repo.Name())
-				if err := fetchChange(change, repo.Path()); err != nil {
+				if err := repo.FetchRemoteChange(change); err != nil {
 					log.Warn("Error fetching change")
 				} else {
 					log.Debug("fetched change")
@@ -196,65 +195,13 @@ func fetchRemoteChanges(changes chan gitsync.GitChange, repo gitsync.Repo) {
 // Note: It currently spawns a goroutine to do the polling.
 func manageLocalGitRepo(repo gitsync.Repo, pollPeriod time.Duration, changes chan gitsync.GitChange) (err error) {
 	// begin sharing the repo
-	if err = shareGitRepo(repo); err != nil {
+	if err = repo.Share(); err != nil {
 		return fmt.Errorf("Unable to start git daemon: %s", err.Error())
 	}
 
 	go gitsync.PollRepoForChanges(log.Global, repo, changes, pollPeriod)
 
 	return
-}
-
-// shareGitRepo spawns a gitdaemon instance for this repository. This allows
-// remote clients to connect and get fetch data.
-func shareGitRepo(repo gitsync.Repo) error {
-	daemonSentinel := path.Join(repo.Path(), ".git",
-		"git-daemon-export-ok")
-	if _, err := os.Stat(daemonSentinel); os.IsNotExist(err) {
-		_, err := os.Create(daemonSentinel)
-		if err != nil {
-			log.Fatalf("Unable to set up git daemon")
-		}
-	}
-	cmd := exec.Command("git", "daemon", "--reuseaddr",
-		fmt.Sprintf("--base-path=%s/..", repo.Path()),
-		repo.Path())
-	err := cmd.Start()
-	return err
-}
-
-// fetchChange runs git to retrieve commits from a remotely running gitdaemon.
-func fetchChange(change gitsync.GitChange, dirName string) error {
-	// We force a fetch from the change's source to a local branch
-	// named gitsync-<remote username>-<remote branch name>
-	localBranchName := fmt.Sprintf("gitsync-%s-%s", change.User, change.RefName)
-	fetchUrl := fmt.Sprintf("git://%s/%s", change.GetPeerIP(), change.RepoName)
-	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
-		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
-	cmd.Dir = dirName
-	err := cmd.Run()
-	return err
-}
-
-// cleanup deletes all local branches beginning with 'gitsync-'
-func cleanup(dirName string) {
-	getBranches := exec.Command("git", "branch")
-	getGitsyncBranches := exec.Command("grep", "gitsync-")
-	deleteGitsyncBranches := exec.Command("xargs", "git", "branch", "-D")
-	getBranches.Dir = dirName
-	getGitsyncBranches.Dir = dirName
-	deleteGitsyncBranches.Dir = dirName
-	getGitsyncBranches.Stdin, _ = getBranches.StdoutPipe()
-	deleteGitsyncBranches.Stdin, _ = getGitsyncBranches.StdoutPipe()
-	err := deleteGitsyncBranches.Start()
-	err = getGitsyncBranches.Start()
-	err = getBranches.Run()
-	err = getGitsyncBranches.Wait()
-	err = deleteGitsyncBranches.Wait()
-
-	if err != nil {
-		log.Info("Could not delete gitsync branches ", err)
-	}
 }
 
 // exitOnSignal waits and returns on any of the passed in signals
@@ -288,14 +235,18 @@ func main() {
 	if err = manageLocalGitRepo(repo, 1*time.Second, bus.GetPublishChannel()); err != nil {
 		fatalf("Cannot manage repo: %s", err)
 	}
-	go fetchRemoteChanges(bus.GetNewListener(), repo)
+	go fetchRemoteOnChange(bus.GetNewListener(), repo)
 
 	go gitsync.NetIO(log.Global, repo, groupAddr, bus.GetPublishChannel(), bus.GetNewListener())
 	if webPort != 0 {
 		go serveChangesWeb(uint16(webPort), bus.GetNewListener())
 	}
 
-	defer cleanup(dirName)
+	defer func() {
+		if err := repo.Cleanup(); err != nil {
+			log.Warn("Could not delete gitsync branches ", err)
+		}
+	}()
 
 	// wait until we are told to shut down
 	exitOnSignal(os.Kill, os.Interrupt, syscall.SIGUSR1)

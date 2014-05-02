@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	log "github.com/ngmoco/timber"
+	"os"
 	"os/exec"
 	"path"
 	"regexp"
@@ -22,6 +23,17 @@ type Repo interface {
 	User() string
 	Branches() (branches []*GitChange, err error)
 	RootCommit() (rootCommit string, err error)
+	// FetchRemoteChange forces a fetch from change's source to a local branch
+	// named gitsync-<remote username>-<remote branch name>
+	FetchRemoteChange(change GitChange) (err error)
+
+	// Share spawns a gitdaemon instance for this repository. This allows remote
+	// clients to connect and get fetch data.
+	Share() (err error)
+
+	// Cleanup removes gitsync specific artifacts (braches, remotes etc.) from a
+	// repo.
+	Cleanup() (err error)
 }
 
 // cliReader is a Repo that shells out to the git CLI to interrogate the git
@@ -89,5 +101,63 @@ func (repo *cliReader) Branches() (branches []*GitChange, err error) {
 		})
 	}
 
+	return
+}
+
+// FetchRemoteChange forces a fetch from change's source to a local branch
+// named gitsync-<remote username>-<remote branch name>
+func (repo *cliReader) FetchRemoteChange(change GitChange) (err error) {
+	// We force a fetch from the change's source to a local branch
+	// named gitsync-<remote username>-<remote branch name>
+	localBranchName := fmt.Sprintf("gitsync-%s-%s", change.User, change.RefName)
+	fetchUrl := fmt.Sprintf("git://%s/%s", change.GetPeerIP(), change.RepoName)
+	cmd := exec.Command("git", "fetch", "-f", fetchUrl,
+		fmt.Sprintf("%s:%s", change.RefName, localBranchName))
+	cmd.Dir = repo.Path()
+	return cmd.Run()
+}
+
+func (repo *cliReader) Share() (err error) {
+	// add in the flag to tell git-daemon to share this repo. It is a file in
+	// the .git directory
+	daemonSentinel := path.Join(repo.Path(), ".git",
+		"git-daemon-export-ok")
+	if _, err := os.Stat(daemonSentinel); os.IsNotExist(err) {
+		_, err := os.Create(daemonSentinel)
+		if err != nil {
+			log.Fatalf("Unable to set up git daemon")
+		}
+	}
+
+	// run the daemon
+	cmd := exec.Command("git", "daemon", "--reuseaddr",
+		fmt.Sprintf("--base-path=%s/..", repo.Path()),
+		repo.Path())
+	return cmd.Start()
+}
+
+// Cleanup deletes all local branches beginning with 'gitsync-'
+func (repo *cliReader) Cleanup() (err error) {
+	getBranches := exec.Command("git", "branch")
+	getGitsyncBranches := exec.Command("grep", "gitsync-")
+	deleteGitsyncBranches := exec.Command("xargs", "git", "branch", "-D")
+	getBranches.Dir = repo.Path()
+	getGitsyncBranches.Dir = repo.Path()
+	deleteGitsyncBranches.Dir = repo.Path()
+	getGitsyncBranches.Stdin, _ = getBranches.StdoutPipe()
+	deleteGitsyncBranches.Stdin, _ = getGitsyncBranches.StdoutPipe()
+
+	// run all delete commands and return early on error
+	deleters := [...]func() error{deleteGitsyncBranches.Start,
+		getGitsyncBranches.Start,
+		getBranches.Run,
+		getGitsyncBranches.Wait,
+		deleteGitsyncBranches.Wait}
+	for _, deleteFunc := range deleters {
+		err = deleteFunc()
+		if err != nil {
+			return err
+		}
+	}
 	return
 }
