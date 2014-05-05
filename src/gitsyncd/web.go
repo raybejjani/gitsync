@@ -7,7 +7,6 @@ import (
 	log "github.com/ngmoco/timber"
 	"gitsync"
 	"gitsyncd/webcontent"
-	"html/template"
 	"net/http"
 	"sync"
 )
@@ -79,13 +78,6 @@ func handleGitChangeWebClient(cs *clientSet, ws *websocket.Conn) {
 				log.Info("%s: Wrote out data", makeWebsocketName(ws))
 			}
 		}
-	}
-}
-
-func renderTemplate(w http.ResponseWriter, tmplPath string) {
-	t := template.Must(template.ParseFiles(tmplPath))
-	if err := t.Execute(w, nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
