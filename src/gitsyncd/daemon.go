@@ -9,7 +9,6 @@ import (
 	"gitsync/changebus"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"os/user"
 	"strings"
@@ -237,9 +236,13 @@ func main() {
 	}
 	go fetchRemoteOnChange(bus.GetNewListener(), repo)
 
+	// Start network sharing of GitChanges
 	go gitsync.NetIO(log.Global, repo, groupAddr, bus.GetPublishChannel(), bus.GetNewListener())
+
+	// Start a webserver if needed and publish events to it
 	if webPort != 0 {
-		go serveChangesWeb(uint16(webPort), bus.GetNewListener())
+		webEventsPublish := startWebServer(uint16(webPort))
+		bus.RegisterListener(webEventsPublish)
 	}
 
 	defer func() {
