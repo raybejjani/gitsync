@@ -22,9 +22,8 @@ _testmain.go
 
 *.exe
 
-# gihub and go gets
-src/github.com/
-src/code.google.com/p/go.net/
+# govendor
+vendor/
 
 # files created by build
 src/gitsyncd/webcontent/content.go

@@ -1,0 +1,19 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "xqj5D8XB0fhhWF8mvBWT801Ew5Q=",
+			"path": "github.com/ngmoco/timber",
+			"revision": "c53e208f58280c5e9e89d9c6b0c358e5ae412a1a",
+			"revisionTime": "2013-07-23T23:49:22Z"
+		},
+		{
+			"checksumSHA1": "likOl7O0BJntqagR050kkOBuY4o=",
+			"path": "golang.org/x/net/websocket",
+			"revision": "71a035914f99bb58fe82eac0f1289f10963d876c",
+			"revisionTime": "2016-09-12T21:59:12Z"
+		}
+	],
+	"rootPath": "github.com/raybejjani/gitsync"
+}
