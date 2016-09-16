@@ -4,9 +4,9 @@ all: gitsyncd
 .PHONY: gityncd gitsyncd_noweb
 gitsyncd: prep_web_files gitsyncd_noweb 
 
-	@GOPATH=`pwd` go get -tags='makebuild' gitsyncd
+	@go get -tags='makebuild' github.com/raybejjani/gitsync/gitsyncd
 gitsyncd_noweb: version 
-	@GOPATH=`pwd` go install -tags='makebuild' gitsyncd
+	@go install -tags='makebuild' github.com/raybejjani/gitsync/gitsyncd
 
 .PHONY: version
 version:
@@ -14,13 +14,13 @@ version:
 
 .PHONY: prep_web_files
 prep_web_files:
-	./util/make_code_fs.py \
-		--index /templates/index.html \
-		-i src/gitsyncd/webcontent/content_base.go \
-		-o src/gitsyncd/webcontent/content.go \
-		web 2> /dev/null
+	./build-util/make_code_fs.py \
+		--index ./web/templates/index.html \
+		-i ${GOPATH}/src/github.com/raybejjani/gitsync/gitsyncd/webcontent/content_base.go \
+		-o ${GOPATH}/src/github.com/raybejjani/gitsync/gitsyncd/webcontent/content.go \
+		web 
 
 .PHONY:clean
 clean:
-	@GOPATH=`pwd` go clean
+	@go clean
 	@rm bin/*

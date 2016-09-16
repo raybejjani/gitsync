@@ -1,12 +1,12 @@
 package main
 
 import (
-	"code.google.com/p/go.net/websocket"
 	"encoding/json"
 	"fmt"
 	log "github.com/ngmoco/timber"
-	"gitsync"
-	"gitsyncd/webcontent"
+	"github.com/raybejjani/gitsync/gitsync"
+	"github.com/raybejjani/gitsync/gitsyncd/webcontent"
+	"golang.org/x/net/websocket"
 	"html/template"
 	"net/http"
 	"sync"

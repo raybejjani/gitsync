@@ -5,7 +5,8 @@ import (
 	"flag"
 	"fmt"
 	log "github.com/ngmoco/timber"
-	"gitsync"
+	"github.com/raybejjani/gitsync/gitsync"
+	"github.com/raybejjani/gitsync/util"
 	"net"
 	"os"
 	"os/exec"
@@ -15,7 +16,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"util"
 )
 
 // unixSyslog discovers where the syslog daemon is running on the local machine
